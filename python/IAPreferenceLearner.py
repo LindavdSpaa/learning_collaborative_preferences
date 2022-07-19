@@ -62,9 +62,17 @@ class IAPreferenceLearner:
       bNew[i] /= norm
     return bNew
 
-  def updateModel(self, trace, intentionIdx):
-    prunedTrace = self.scenario.pruneTrajectoryTrace(trace, intentionIdx)
-    self.human.updateModel(prunedTrace, self.robot.actionProbabilities)
+  def updateModel(self, traceSet, intentionIdxSet):
+    maxTraceLength = max([len(tr) for tr in traceSet])+1
+    prunedTraceSet = np.zeros((len(traceSet), maxTraceLength,3), dtype=int)
+    for i, trace in enumerate(traceSet):
+      prunedTrace = self.scenario.pruneTrajectoryTrace(trace, intentionIdxSet[i])
+      n = prunedTrace.shape[1]
+      prunedTraceSet[i,:n] = prunedTrace
+      for j in range(maxTraceLength-n):
+        prunedTraceSet[i,n+j] = prunedTraceSet[i,n-1]
+
+    self.human.updateModel(prunedTraceSet, self.robot.actionProbabilities)
     self.updatePolicy()
 
   def updatePolicy(self):

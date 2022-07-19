@@ -21,14 +21,14 @@ class HumanModel(AgentModel):
     self.theta = -1*scenario.getStateFeatures(np.append(scenario.intentionsSet.data[0],0), scenario.intentionsSet.data[1]) + 0.1*scenario.getStateFeatures(np.append(scenario.intentionsSet.data[0],0), scenario.intentionsSet.data[0])
     self.updateRewardsPolicy()
 
-  def updateModel(self, prunedTrajectory, robotPolicy, debugLevel=0):
+  def updateModel(self, prunedTrajectories, robotPolicy, debugLevel=0):
     self.transitionMatrix = self.getTransitionMatrix(robotPolicy)
 
     if debugLevel >= 1:
       print('Computing IRL solution...')
       tStart = time.time()
     self.theta = maxent.irl(self.featureMatrix, self.nMaxActions, self.gamma,
-                            self.transitionMatrix, prunedTrajectory,
+                            self.transitionMatrix, prunedTrajectories,
                             self.theta, 0.1, 1)
     if debugLevel >= 1:
       dt = time.time() - tStart

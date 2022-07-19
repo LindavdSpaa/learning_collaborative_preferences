@@ -10,10 +10,14 @@ from WardrobeScenarioModel import WardrobeScenario
 from IAPreferenceLearner import IAPreferenceLearner
 #%%
 #%%
-scenario = WardrobeScenario(4)
+scenario = WardrobeScenario(3)
 robotPolicy = 'learner'  # 'learner', 'imitator'
 if robotPolicy == 'learner':
   learner = IAPreferenceLearner(scenario)
+
+#%%
+trajectoryTraces = []
+intentionsToTraces = []
 
 #%%
 print("Enter start support (int):")
@@ -54,12 +58,13 @@ while not scenario.isSupportState(state) or not len(stateTrace):
   state = nextState
 stateTrace.append(state)
 
+trajectoryTraces += [[[stateTrace[i], beliefTrace[i], robotActionTrace[i], humanActionTrace[i], stateTrace[i+1]] for i in range(len(robotActionTrace))]]
+intentionsToTraces += [scenario.getIntentionIdx(stateTrace[-1][:-1])]
 #%%
 if robotPolicy == 'imitator':
   for i in range(len(humanActionTrace)):
     scenario.updateActionImitationList(stateTrace[i], humanActionTrace[i])
 elif robotPolicy == 'learner':
-  trajectoryTrace = [[stateTrace[i], beliefTrace[i], robotActionTrace[i], humanActionTrace[i], stateTrace[i+1]] for i in range(len(robotActionTrace))]
-  learner.updateModel(trajectoryTrace, scenario.getIntentionIdx(stateTrace[-1][:-1]))
+  learner.updateModel(trajectoryTraces[-1:], intentionsToTraces[-1:])
 
 #%%
