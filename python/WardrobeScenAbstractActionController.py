@@ -8,11 +8,19 @@ from WardrobeScenarioModel import WardrobeScenario
 import quaternion as Q
 import numpy as np
 import time, copy, rospy
+from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool, Int8
 
 #%%
 #%%
 class WardrobeAbstractActionController:
+  def ee_pos_callback(self, data): 
+    self.curr_pos = np.array([data.pose.position.x, data.pose.position.y, data.pose.position.z])
+    curr_ori_arr = np.array([data.pose.orientation.w, data.pose.orientation.x, data.pose.orientation.y, data.pose.orientation.z])
+    if curr_ori_arr[0] < 0:
+      curr_ori_arr *= -1
+    self.curr_ori = curr_ori_arr
+
   def updateGraspState(self, msg):
     self.graspState = msg.data
 
@@ -20,7 +28,8 @@ class WardrobeAbstractActionController:
     # Make sure a ROS node is running
     self.controller = VariableImpedanceController()
 
-    self.graspState_listener = rospy.Subscriber('/grasp_controller/state', Int8, self.updateGraspState)
+    rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
+    rospy.Subscriber('/grasp_controller/state', Int8, self.updateGraspState)
     self.grasp_pub = rospy.Publisher('/grasp_controller/grasp', Bool, queue_size=0)
 
     self.scenario = WardrobeScenario(None)
@@ -175,10 +184,10 @@ class WardrobeAbstractActionController:
 
     humanGraspCorrection = 0
     waitedTime = 0
-    pose = self.controller.get_current_pose()
+    pose = (self.curr_pos,self.curr_ori)
     t = time.time()
     for _ in range(int(timeoutTime/dt)):
-      state, d = self.scenario.findClosestState(*self.controller.get_current_pose(), 3*self.graspState+humanGraspCorrection)
+      state, d = self.scenario.findClosestState(self.curr_pos,self.curr_ori, 3*self.graspState+humanGraspCorrection)
 
       if np.linalg.norm(state-currState) > eps and d <= stateMarginL:
         stateIdx = self.scenario.getStateIdx(state)
@@ -188,8 +197,8 @@ class WardrobeAbstractActionController:
       time.sleep(max(0,dt + t - time.time()))
       t = time.time()
       
-      waitedTime = (waitedTime + dt) if np.linalg.norm(np.hstack(self.controller.get_current_pose())-np.hstack(pose)) < 1e-3 else 0
-      pose = self.controller.get_current_pose()
+      waitedTime = (waitedTime + dt) if np.linalg.norm(np.hstack((self.curr_pos,self.curr_ori))-np.hstack(pose)) < 1e-3 else 0
+      pose = (self.curr_pos,self.curr_ori)
       
       # after 5 seconds of inactivity, check if object is at support.
       # If so, assume human has ungrasped
@@ -236,11 +245,11 @@ class WardrobeAbstractActionController:
     return self.getStateAndIdx()
 
   def goToClosestGoal(self):
-    supportIdx,_ = self.scenario.findClosestSupportIdx(*self.controller.get_current_pose())
+    supportIdx,_ = self.scenario.findClosestSupportIdx(self.curr_pos,self.curr_ori)
     return self.goToGoal(supportIdx)
 
   def getState(self, checkGrasp=True):
-    state = copy.deepcopy(self.scenario.findClosestState(*self.controller.get_current_pose(),3)[0])
+    state = copy.deepcopy(self.scenario.findClosestState(self.curr_pos,self.curr_ori,3)[0])
     if checkGrasp:
       for _ in range(10):
         if self.graspState == 1:

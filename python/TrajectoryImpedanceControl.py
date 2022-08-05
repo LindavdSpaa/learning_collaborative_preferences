@@ -351,7 +351,4 @@ class VariableImpedanceController:
       self.stiff_pub.publish(stiff_des)
     return 0
 
-  def get_current_pose(self) -> np.array:
-    return self.curr_pos, Q.as_float_array(self.curr_ori)
-
 #%%
