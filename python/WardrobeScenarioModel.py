@@ -76,8 +76,28 @@ class WardrobeScenario(TwoActorWorldModel):
 
   def findClosestState(self, posR:np.array, oriR:np.array, grasp:int) -> np.array:
     state = self.getStateFromRobotPose(posR, oriR, grasp)
-    distance, closestStateIdx = self.statesSet.query(state)
-    return self.statesSet.data[closestStateIdx], distance
+    d, closestPosIdx = self.statesPosSet.query(np.concatenate([state[:3],np.zeros(4)]))#,[state[7]]]))
+    if closestPosIdx < 12:
+      closestPosIdx -= closestPosIdx%4
+    sIdx = closestPosIdx
+    # if state[7]-3 < 1e-9:
+    dAng0 = angleDifference(state[3:7], self.statesSet.data[sIdx,3:7])
+    if sIdx < 12 and dAng0 > np.linalg.norm(state[:3]-self.statesSet.data[sIdx+(9 if sIdx<4 else 11),:3]):
+      sIdx += 9 if sIdx<4 else 11
+    if sIdx >= 12:
+      if sIdx%2 == 1:
+        sIdx -= 1
+      dAng1 = angleDifference(state[3:7], self.statesSet.data[sIdx+1,3:7])
+      if dAng1 < dAng0:
+        sIdx += 1
+      elif sIdx != closestPosIdx:
+        sIdx = closestPosIdx
+    if sIdx < 12:
+      sIdx += grasp
+    closestState = self.statesSet.data[sIdx]
+    dLin = np.linalg.norm(closestState[:3]-state[:3])
+    dAng = angleDifference(closestState[3:7],state[3:7])
+    return closestState, sIdx, dLin, dAng
 
   def findClosestSupportIdx(self, posR:np.array, oriR:np.array):
     state = self.getStateFromRobotPose(posR, oriR, 0)

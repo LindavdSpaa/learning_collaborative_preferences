@@ -20,6 +20,8 @@ class TwoActorWorldModel:
     self.offsetSet = KDTree(offsetPoints)
     self.statesSet = KDTree(np.stack([np.concatenate((p,[i])) for p in supportPoints for i in self.graspSet] +\
                                      [np.concatenate((xy,[z],o,[self.graspSet[-1]])) for xy in xyPositions for z in zPositions for o in self.orientations]))
+    self.statesPosSet = KDTree(np.stack([np.concatenate((p[:3],np.zeros(4))) for p in supportPoints for i in self.graspSet] +\
+                                        [np.concatenate((xy,[z],np.zeros(4))) for xy in xyPositions for z in zPositions for _ in self.orientations]))
 
     # Actions:
     # wait (remain passive), grasp/let go, dock/undock, move to (x,y) or h, rotate
@@ -163,7 +165,6 @@ class TwoActorWorldModel:
       return np.exp(-d*d/(2*w*w))
 
     phiSet = np.append(self.orientations, [intention[3:]], axis=0)
-    # phi = intention[3:]
     graspState = int(round(state[-1]))
 
     # At the intended goal position

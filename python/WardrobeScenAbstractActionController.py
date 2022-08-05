@@ -176,22 +176,22 @@ class WardrobeAbstractActionController:
     return actionsSet
 
   def waitForNextState(self, currState):
-    dt = 1/30         # s time before checking again
-    timeoutTime = 60  # s before stopping to check, > dt
-    stateMarginL = 1. # m large distance considered close to a state
-    stateMarginS = .1 # m small distance considered close to a state
-    eps = 1e-10        # floatingpoint error considered 0
+    dt = 1/30             # s time before checking again
+    timeoutTime = 60      # s before stopping to check, > dt
+    stateMarginLinL = .5  # m large distance considered close to a state
+    stateMarginAngL = .8  # rad large distance considered close to a state
+    stateMarginLinS = .03 # m small distance considered close to a state
+    eps = 1e-10           # floatingpoint error considered 0
 
     humanGraspCorrection = 0
     waitedTime = 0
     pose = (self.curr_pos,self.curr_ori)
     t = time.time()
     for _ in range(int(timeoutTime/dt)):
-      state, d = self.scenario.findClosestState(self.curr_pos,self.curr_ori, 3*self.graspState+humanGraspCorrection)
+      state, stateIdx, dLin, dAng = self.scenario.findClosestState(self.curr_pos,self.curr_ori, 3*self.graspState+humanGraspCorrection)
 
-      if np.linalg.norm(state-currState) > eps and d <= stateMarginL:
-        stateIdx = self.scenario.getStateIdx(state)
-        if (stateIdx < 12 and d <= stateMarginS) or stateIdx >= 12:
+      if np.linalg.norm(state-currState) > eps and dLin <= stateMarginLinL and dAng <= stateMarginAngL:
+        if (stateIdx < 12 and dLin <= stateMarginLinS) or stateIdx >= 12:
           return state
 
       time.sleep(max(0,dt + t - time.time()))
