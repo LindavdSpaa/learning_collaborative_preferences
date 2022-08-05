@@ -109,3 +109,32 @@ np.savez(datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+'-learned-policy-'+robotPo
           beliefs=np.array(beliefsTraces, dtype=object), 
           learnedPolicy=np.array(learnedPolicy, dtype=object))
 # %%
+
+
+
+
+
+
+# %%
+# %%
+from exampleSequences import stateTrace0, actionHTrace0, stateTrace1, actionHTrace1
+
+scenario.setStartState(1)
+for i in range(len(actionHTrace0)):
+  scenario.updateActionImitationList(stateTrace0[i], actionHTrace0[i])
+
+scenario.setStartState(0)
+for i in range(len(actionHTrace1)):
+  scenario.updateActionImitationList(stateTrace1[i], actionHTrace1[i])
+
+# %%
+from exampleSequences import stateTrace0N, actionHTrace0N, stateTrace1N, actionHTrace1N
+
+scenario.setStartState(1)
+for i in range(len(actionHTrace0N)):
+  scenario.updateActionImitationList(stateTrace0N[i], actionHTrace0N[i])
+
+scenario.setStartState(0)
+for i in range(len(actionHTrace1N)):
+  scenario.updateActionImitationList(stateTrace1N[i], actionHTrace1N[i])
+# %%
