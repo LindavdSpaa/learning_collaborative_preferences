@@ -113,28 +113,6 @@ class VariableImpedanceController:
       curr_ori_arr *= -1
     self.curr_ori = Q.from_float_array(curr_ori_arr)
 
-    if self.nullspaceControl and not self.activeControl:
-      # t = time.time()
-      goalPoseArray = np.hstack([self.curr_pos, curr_ori_arr])
-      configuration, std_null = self.gp_null.predict([goalPoseArray], return_std=True)
-      configuration += self.gp_null0
-      configuration = np.minimum(np.maximum(configuration, self.minJoints), self.maxJoints)
-      # Alternative prediction
-      # KxX = self.gp_null.kernel_(goalPoseArray, self.gp_nullX)[0]
-      # configuration = self.gp_null0 + KxX.dot(self.gp_nullY)/np.sum(KxX)
-
-      jointConfiguration = Float32MultiArray()
-      jointConfiguration.data = configuration[0].astype(np.float32)
-      self.q_pub.publish(jointConfiguration)
-
-      stiff_null = 20*np.max([0, 0.5-std_null[0,0]/self.std_nullMax])
-      # stiff_null = 10*(1-std_null[0]/self.std_nullMax)
-      self.stiffness = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 0.0, stiff_null])
-      stiff_des = Float32MultiArray()
-      stiff_des.data = self.stiffness.astype(np.float32)
-      self.stiff_pub.publish(stiff_des)
-      # print("Computation time: {} s".format(time.time()-t))
-
   def read_conf(self, data):
     self.curr_conf = np.array(data.position[:7])
     self.curr_cVel = np.array(data.velocity[:7])
@@ -323,6 +301,8 @@ class VariableImpedanceController:
         if debugLevel >= 1:
           print("Active control switched off because of zero stiffness")
         # self.stiffness = np.array([0., 0., 0., 25., 25., 0., 0.])
+        # stiff_des.data = self.stiffness.astype(np.float32)
+        # self.stiff_pub.publish(stiff_des)
         return 1
 
       # exit when standing still
@@ -341,14 +321,10 @@ class VariableImpedanceController:
     if debugLevel >= 1:
       print("Active control switched off in passive mode")
 
-    if not self.nullspaceControl:
-      self.stiffness = np.array([0.0, 0.0, 0.0, 25.0, 25.0, 25.0 if self.eeDOF<4 else 0.0, 0.0])
-      stiff_des = Float32MultiArray()
-      stiff_des.data = self.stiffness.astype(np.float32)
-      # if debugLevel >= 1:
-      #   print("Stiffness:")
-      #   print(stiff_des)
-      self.stiff_pub.publish(stiff_des)
+    self.stiffness = np.array([0.0, 0.0, 0.0, 25.0, 25.0, 25.0 if self.eeDOF<4 else 0.0, 0.0])
+    stiff_des = Float32MultiArray()
+    stiff_des.data = self.stiffness.astype(np.float32)
+    self.stiff_pub.publish(stiff_des)
     return 0
 
 #%%
