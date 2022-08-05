@@ -8,7 +8,7 @@ from WardrobeScenarioModel import WardrobeScenario
 import quaternion as Q
 import numpy as np
 import time, copy, rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import WrenchStamped, PoseStamped
 from std_msgs.msg import Bool, Int8
 
 #%%
@@ -21,6 +21,9 @@ class WardrobeAbstractActionController:
       curr_ori_arr *= -1
     self.curr_ori = curr_ori_arr
 
+  def read_force(self, data):
+    self.normForce = np.linalg.norm([data.wrench.force.x, data.wrench.force.y, data.wrench.force.z])
+
   def updateGraspState(self, msg):
     self.graspState = msg.data
 
@@ -29,6 +32,7 @@ class WardrobeAbstractActionController:
     self.controller = VariableImpedanceController()
 
     rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
+    rospy.Subscriber("/force_torque_ext", WrenchStamped , self.read_force)
     rospy.Subscriber('/grasp_controller/state', Int8, self.updateGraspState)
     self.grasp_pub = rospy.Publisher('/grasp_controller/grasp', Bool, queue_size=0)
 
@@ -181,6 +185,7 @@ class WardrobeAbstractActionController:
     stateMarginLinL = .5  # m large distance considered close to a state
     stateMarginAngL = .8  # rad large distance considered close to a state
     stateMarginLinS = .03 # m small distance considered close to a state
+    forceMargin = 1.5     # N normal force considered close to zero
     eps = 1e-10           # floatingpoint error considered 0
 
     humanGraspCorrection = 0
@@ -190,9 +195,10 @@ class WardrobeAbstractActionController:
     for _ in range(int(timeoutTime/dt)):
       state, stateIdx, dLin, dAng = self.scenario.findClosestState(self.curr_pos,self.curr_ori, 3*self.graspState+humanGraspCorrection)
 
-      if np.linalg.norm(state-currState) > eps and dLin <= stateMarginLinL and dAng <= stateMarginAngL:
-        if (stateIdx < 12 and dLin <= stateMarginLinS) or stateIdx >= 12:
-          return state
+      if np.linalg.norm(state-currState) > eps and \
+          ((stateIdx >= 12 and dLin <= stateMarginLinL and dAng <= stateMarginAngL) or\
+          ((dLin <= stateMarginLinS or waitedTime > 0.5) and self.normForce < forceMargin)):
+        return state
 
       time.sleep(max(0,dt + t - time.time()))
       t = time.time()
