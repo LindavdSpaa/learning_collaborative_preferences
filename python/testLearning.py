@@ -13,10 +13,18 @@ n_intentions = learner.scenario.intentionsSet.n
 n_stateActions = sum([len(sa) for sa in learner.scenario.actionsSet])
 
 # %%
+taskOrder = [1, 0, 1, 0, 2, 1, 2, 0, 1]
+n_iter = len(taskOrder)-1
+
+# %%
+prefSelection = [(4,0), (5,0), (1,0), (1,1), (4,1), (3,1), (0,5), (2,3)]
+n_pref = len(prefSelection)
+
+# %%
 learnedActionProbabilities = np.zeros((n_pref,n_iter+1,n_intentions,n_stateActions))
 for p in range(n_pref):
   print("Preference: {}".format(p))
-  p_ij = (p//6, p%6)
+  p_ij = (p//6, p%6) if n_pref == 36 else prefSelection[p]
 
   # Init learner and store initial policy
   learner.initLearning()
@@ -27,8 +35,8 @@ for p in range(n_pref):
 
   for k in range(n_iter):
     print("Iteration: {}".format(k))
-    goalSupport = k%2
-    startSupport = (k+1)%2
+    goalSupport = taskOrder[k+1] #k%2 #
+    startSupport = taskOrder[k] #(k+1)%2 #
 
     def getNextState(stateIdx:int, robotAction:str) -> int:
       robotGraspDeltaStateIdx = 2 - 4*(stateIdx%4//2) if stateIdx<12 and robotAction=='(un)grasp' else 0
