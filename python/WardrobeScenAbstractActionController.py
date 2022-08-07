@@ -3,7 +3,8 @@ By Linda van der Spaa, 2022
 l.f.vanderspaa@tudelft.nl
 """
 
-from TrajectoryImpedanceControl import ReferenceTrajectory, VariableImpedanceController
+from ReferenceTrajectories import ReferenceTrajectory
+from TrajectoryImpedanceControl import VariableImpedanceController
 from WardrobeScenarioModel import WardrobeScenario
 import quaternion as Q
 import numpy as np
