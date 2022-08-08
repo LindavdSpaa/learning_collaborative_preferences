@@ -10,7 +10,7 @@ import quaternion as Q
 import numpy as np
 import time, copy, rospy
 from geometry_msgs.msg import WrenchStamped, PoseStamped
-from std_msgs.msg import Bool, Int8
+from std_msgs.msg import Bool, Int8, Int16MultiArray
 
 #%%
 #%%
@@ -36,11 +36,14 @@ class WardrobeAbstractActionController:
     rospy.Subscriber("/force_torque_ext", WrenchStamped , self.read_force)
     rospy.Subscriber('/grasp_controller/state', Int8, self.updateGraspState)
     self.grasp_pub = rospy.Publisher('/grasp_controller/grasp', Bool, queue_size=0)
+    self.passive_pub = rospy.Publisher('/DAVIcontroller/passive', Bool, queue_size=0)
+    self.goto_support_pub = rospy.Publisher('/DAVIcontroller/goal', Int8, queue_size=0)
+    self.track_traj_pub = rospy.Publisher('/DAVIcontroller/trajectory_indices', Int16MultiArray, queue_size=0)
 
     self.scenario = WardrobeScenario(None)
     self.controller.setForceTransform(lambda f,t: f + self.scenario.torqueR2forceH(t))
 
-    self.actionsSet = self.createControlActionSet(varStiff)
+    # self.actionsSet = self.createControlActionSet(varStiff)
 
   def grasp(self, grasp:bool):
     tTimeout = 10  # wait for maximum 2s
@@ -52,133 +55,6 @@ class WardrobeAbstractActionController:
         return 0
       time.sleep(0.05)
     return -1
-
-  def createControlActionSet(self, varStiff=False):
-    tf = self.scenario.getRobotPoseWrtObject
-    tfInv = self.scenario.getObjectPoseWrtRobot
-    reachState = lambda pos,ori: self.controller.reach_goal(ReferenceTrajectory(pos,ori, tf,tfInv), varStiff,0)
-    reachDirect = lambda pos,ori: self.controller.reach_goal(ReferenceTrajectory(pos,ori), varStiff=varStiff, debugLevel=0)
-
-    positions = self.scenario.statesSet.data[:,:3]
-    orientations = self.scenario.statesSet.data[:,3:7]
-    qori0 = Q.from_float_array(orientations[0])
-
-    abstrActions = self.scenario.actionsSet
-
-    actionsSet = []
-    for sIdx,_ in enumerate(self.scenario.actionsSet):
-      actions = [([abstrActions[sIdx][0], sIdx, 0], lambda s: self.controller.setPassive())]
-      aIdx = 1
-      if sIdx < 12:
-        # grasp and let go
-        actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                         lambda s: self.grasp(True if s%4 < 2 else False)))
-        aIdx += 1
-        # take off support
-        if sIdx == 3:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([np.append(positions[3][:2],
-                                                                     positions[12][2:3]),
-                                                           positions[12]]),
-                                                np.vstack([orientations[3],
-                                                           orientations[12]]))))
-          aIdx += 1
-        elif sIdx == 7:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([np.append(positions[7][:2],
-                                                                     positions[19][2:3]),
-                                                           positions[19]]),
-                                                np.vstack([orientations[7],
-                                                           orientations[19]]))))
-          aIdx += 1
-        elif sIdx == 11:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([np.append(positions[11][:2],
-                                                                     positions[23][2:3]),
-                                                           positions[23]]),
-                                                np.vstack([orientations[11],
-                                                           orientations[23]]))))
-          aIdx += 1
-      else:
-        # put on support
-        if sIdx == 12:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([positions[12],
-                                                           np.append(positions[3][:2],   
-                                                                     positions[12][2:3]),
-                                                           positions[3]]),
-                                                np.vstack([orientations[12],
-                                                           orientations[3],
-                                                           orientations[3]]))))
-          aIdx += 1
-        elif sIdx == 19:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([positions[19],
-                                                           np.append(positions[7][:2],   
-                                                                     positions[19][2:3]),
-                                                           positions[7]]),
-                                                np.vstack([orientations[19],
-                                                           orientations[7],
-                                                           orientations[7]]))))
-          aIdx += 1
-        elif sIdx == 23:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState(np.vstack([positions[23],
-                                                           np.append(positions[11][:2],   
-                                                                     positions[23][2:3]),
-                                                           positions[11]]),
-                                                np.vstack([orientations[23],
-                                                           orientations[11],
-                                                           orientations[11]]))))
-          aIdx += 1
-        # move over
-        if 12 <= sIdx < 20:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState([positions[20+s%4]], [orientations[s]])))
-          aIdx += 1
-        if 12 <= sIdx < 16 or 20 <= sIdx < 24:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState([positions[16+s%4]], [orientations[s]])))
-          aIdx += 1
-        if 16 <= sIdx < 24:
-          if sIdx%2 == 1:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachDirect([tf(positions[12+s%4], qori0)[0]], [orientations[s]])))
-            aIdx += 1
-          else:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachState([positions[12+s%4]], [orientations[s]])))
-            aIdx += 1
-        # move up/down
-        if sIdx%4 < 2:
-          if sIdx < 16:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachDirect([tf(positions[s+2], qori0)[0]], [orientations[s]])))
-            aIdx += 1
-          else:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachState([positions[s+2]], [orientations[s]])))
-            aIdx += 1
-        else:
-          if sIdx < 16:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachDirect([tf(positions[s-2], qori0)[0]], [orientations[s]])))
-            aIdx += 1
-          else:
-            actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                             lambda s: reachState([positions[s-2]], [orientations[s]])))
-            aIdx += 1
-        # rotate
-        if sIdx < 16:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachDirect([tf(positions[s], qori0)[0]], [orientations[s-1 if s%2 else s+1]])))
-          aIdx += 1
-        else:
-          actions.append(([abstrActions[sIdx][aIdx], sIdx, aIdx],
-                           lambda s: reachState([positions[s-1 if s%2 else s+1]], [orientations[s-1 if s%2 else s+1]])))
-          aIdx += 1
-      actionsSet.append(actions)
-    return actionsSet
 
   def waitForNextState(self, currState):
     dt = 1/30             # s time before checking again
@@ -221,7 +97,21 @@ class WardrobeAbstractActionController:
     return state
 
   def doAction(self, stateIdx, actionIdx, withGrasp=True) -> int:
-    print(self.actionsSet[stateIdx][actionIdx][0])
+    print([self.scenario.actionsSet[stateIdx][actionIdx], stateIdx,actionIdx])
+
+    if actionIdx == 0:
+      passive_msg = Bool()
+      passive_msg.data = True
+      self.passive_pub.publish(passive_msg)
+    elif stateIdx < 12 and actionIdx == 1:
+      self.grasp(True if stateIdx%4 < 2 else False)
+    else:
+      traj_msg = Int16MultiArray()
+      traj_msg.data = np.array([stateIdx, actionIdx], dtype=int)
+      self.track_traj_pub.publish(traj_msg)
+
+    state = self.waitForNextState(self.scenario.statesSet.data[stateIdx])
+    return state, self.scenario.getStateIdx(state)
 
     exitflag = self.actionsSet[stateIdx][actionIdx][1](stateIdx)
     if exitflag == 1:
@@ -245,15 +135,17 @@ class WardrobeAbstractActionController:
     return self.getStateAndIdx(withGrasp)
 
   def goToGoal(self, goalIdx):
-    goalState = self.scenario.statesSet.data[4*goalIdx]
-    tf = self.scenario.getRobotPoseWrtObject
-    tfInv = self.scenario.getObjectPoseWrtRobot
-    self.controller.reach_goal(ReferenceTrajectory([goalState[:3]],[goalState[3:7]], tf,tfInv), False,0)
-    return self.getStateAndIdx()
+    goal_msg = Int8()
+    goal_msg.data = goalIdx
+    self.goto_support_pub.publish(goal_msg)
 
   def goToClosestGoal(self):
     supportIdx,_ = self.scenario.findClosestSupportIdx(self.curr_pos,self.curr_ori)
-    return self.goToGoal(supportIdx)
+    self.goToGoal(supportIdx)
+    state = self.getState(False)
+    while not self.scenario.isSupportState(state):
+      state = self.waitForNextState(state)
+    return state, self.scenario.getStateIdx(state)
 
   def getState(self, checkGrasp=True):
     state = copy.deepcopy(self.scenario.findClosestState(self.curr_pos,self.curr_ori,3)[0])

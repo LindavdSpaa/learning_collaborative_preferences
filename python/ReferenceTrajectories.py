@@ -25,7 +25,7 @@ class ReferenceTrajectory:
   def __init__(self, xyzWaypoints:np.array, oriWaypoints:np.array,
                obj2robotTransform:Tuple[np.array,Q.quaternion]=lambda p,q:(p,q),
                robot2objTransform:Tuple[np.array,Q.quaternion]=lambda p,q:(p,q)):
-    tRefTraj = np.array([0])
+    tRefTraj = np.array([0.])
     xRefTraj = xyzWaypoints
     qRefTraj = np.array([Q.from_float_array(o) for o in oriWaypoints])
 
@@ -37,36 +37,36 @@ class ReferenceTrajectory:
       angDist = Q.rotation_intrinsic_distance(qRefTraj[i-1], qRefTraj[i])
       tRefTraj = np.append(tRefTraj, [tRefTraj[-1] + max(xDist/self.v, angDist/self.w)])
 
-    self.tRefTraj = tRefTraj
-    self.xRefTraj = xRefTraj
-    self.qRefTraj = qRefTraj
-
-    self.xGoal = xRefTraj[-1]
-    self.qGoal = qRefTraj[-1]
+    self.tRefTraj = np.append([tRefTraj[0]], tRefTraj)
+    self.xRefTraj = np.append([xRefTraj[0]], xRefTraj, axis=0)
+    self.qRefTraj = np.append([qRefTraj[0]], qRefTraj, axis=0)
 
     self.transform = obj2robotTransform
     self.invTransform = robot2objTransform
 
-  def initialize(self, xRobot:np.array, qRobot:Q.quaternion):
+  def setStart(self, xRobot:np.array, qRobot:Q.quaternion):
     x0, q0 = self.invTransform(xRobot, qRobot)
     xDist = np.linalg.norm(x0-self.xRefTraj[0])
     angDist = Q.rotation_intrinsic_distance(q0, self.qRefTraj[0])
     dt = max(xDist/self.v, angDist/self.w)
 
-    self.tRefTraj = np.append([0], dt+self.tRefTraj)
-    self.xRefTraj = np.append([x0], self.xRefTraj, axis=0)
-    self.qRefTraj = np.append([q0], self.qRefTraj, axis=0)
+    self.tRefTraj += dt
+    self.tRefTraj[0] = 0.
+    self.xRefTraj[0] = x0
+    self.qRefTraj[0] = q0
 
     self.tRef = 0
     self.xRef = x0
     self.qRef = q0
 
-  def getRobotGoal(self):
-    return self.transform(self.xGoal, self.qGoal)
-
   def getDiff2Goal(self, xyzRobot, qRobot):
     xObj, qObj = self.invTransform(xyzRobot, qRobot)
-    return np.linalg.norm(xObj-self.xGoal), Q.rotation_intrinsic_distance(qObj,self.qGoal)
+    return np.linalg.norm(xObj-self.xRefTraj[-1]), Q.rotation_intrinsic_distance(qObj,self.qRefTraj[-1])
+
+  def getDiff2StartGoal(self, xyzRobot, qRobot):
+    xObj, qObj = self.invTransform(xyzRobot, qRobot)
+    return np.linalg.norm(xObj-self.xRefTraj[0]), Q.rotation_intrinsic_distance(qObj,self.qRefTraj[0]), \
+        np.linalg.norm(xObj-self.xRefTraj[-1]), Q.rotation_intrinsic_distance(qObj,self.qRefTraj[-1])
 
   def setVelocities(self, v:float, w:float):
     self.v = v
