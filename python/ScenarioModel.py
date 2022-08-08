@@ -318,6 +318,8 @@ class TwoActorWorldModel:
       gh0 = int(round(s0[-1])) % 2
       gh1 = int(round(s1[-1])) % 2
       action ='(un)grasp' if gh1 != gh0 else 'wait'
+    elif abs(s1[-1]-s0[-1]) > .5 and abs(sNew[-1]-s1[-1]) < .1:
+      action = '(un)grasp' 
     elif self.supportSet.query(s0[:-1])[0] < 1e-9:
       action = 'take off support'
     else:
