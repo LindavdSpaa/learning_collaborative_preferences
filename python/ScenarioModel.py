@@ -32,6 +32,10 @@ class TwoActorWorldModel:
     self.intentionsSet = self.supportSet
     self.intentionNames = [str(i) for i in range(self.intentionsSet.n)]
 
+    self.terminalStateIndices = [i for i,s in enumerate(self.statesSet.data) if s[-1]==0]
+    self.stateTransitionTable = [[[self.statesSet.query(self.stateTransition(s,ar,ah)[0])[1] for ah in self.actionsSet[s_i]] for ar in self.actionsSet[s_i]] for s_i,s in enumerate(self.statesSet.data)]
+    self.coopRewardTable = [[[[self.cooperationReward(s1,s0,ar,ah,self.stateTransition(s0,ar,ah)[1]) for ah in self.actionsSet[s0_i]] for ar in self.actionsSet[s0_i]] for s0_i,s0 in enumerate(self.statesSet.data)] for s1 in self.statesSet.data]
+
 
   def validActionsInState(self, state):
     actions = ['wait']
@@ -193,7 +197,7 @@ class TwoActorWorldModel:
     if (featureSum := np.sum(featureArray)) > 1:
       return featureArray/featureSum
     elif featureSum < 1e-9:
-      print("Warning: No features in this state!")
+      print("Warning: No features in this state: "+str(state))
     return featureArray
 
   def getFeatureMatrix(self):
@@ -235,9 +239,9 @@ class TwoActorWorldModel:
 
     computeReward = partnerReward is not None
 
-    transitionFunc = lambda s,a,ap: self.stateTransition(s,a,ap) if actor=='robot' else self.stateTransition(s,ap,a)
+    transitionFunc = lambda s,a,ap: self.stateTransitionTable[s][a][ap] if actor=='robot' else self.stateTransitionTable[s][ap][a]
     if computeReward:
-      coopReward = lambda s1,s0,a,ap,f: self.cooperationReward(s1,s0,a,ap,f) if actor=='robot' else self.cooperationReward(s1,s0,ap,a,f)
+      coopReward = lambda s1,s0,a,ap: self.coopRewardTable[s1][s0][a][ap] if actor=='robot' else self.coopRewardTable[s1][s0][ap][a]
 
     # Transitions T(s,a,s') and rewards R(s,a,s')
     T = np.zeros((nI*nS, nA, nI*nS))
@@ -247,28 +251,25 @@ class TwoActorWorldModel:
       intention = self.intentionsSet.data[iIdx]
       for s0Idx in range(nS):
         s0iIdx = nS*iIdx + s0Idx
-        s0 = self.statesSet.data[s0Idx]
 
         for aIdx in range(nA):
           # Terminal state
-          if np.linalg.norm(s0[:-1]-intention) < 1e-3 and int(round(s0[-1])) == 0:
+          if s0Idx == self.terminalStateIndices[iIdx]:
             T[s0iIdx, aIdx, s0iIdx] = 1.0
           else:
-            localActionSet = self.actionsSet[s0Idx]
-            nLocalActions = len(localActionSet)
-            a = localActionSet[aIdx % nLocalActions]
+            nLocalActions = len(self.actionsSet[s0Idx])
 
-            for apIdx, ap in enumerate(localActionSet):
+            for apIdx in range(nLocalActions):
               pPartnerAction = partnerActionProbabilities[iIdx][s0Idx][apIdx]
-              (s1,flag) = transitionFunc(s0,a,ap)
+              s1Idx = transitionFunc(s0Idx,aIdx%nLocalActions,apIdx)
 
-              s1iIdx = nS*iIdx + self.statesSet.query(s1)[1]
+              s1iIdx = nS*iIdx + s1Idx
               T[s0iIdx, aIdx, s1iIdx] += pPartnerAction
 
               if computeReward:
                 reward = 0.#self.goalReward(s0, s1)
-                reward += coopReward(s1, s0, a, ap, flag)
-                reward += partnerReward[iIdx, s0Idx]
+                reward += coopReward(s1Idx, s0Idx, aIdx%nLocalActions, apIdx)
+                # reward += partnerReward[iIdx, s0Idx]
                 R[s0iIdx, aIdx, s1iIdx] += pPartnerAction*reward
 
     return (T, R) if computeReward else T
@@ -357,6 +358,10 @@ class TwoActorWorldModel:
         robotActionSequence.insert(i+1, 'wait')
       if i == 10:   # to avoid infinite looping
         print("Warning: no valid human action sequence found!")
+        print("From, to:")
+        print(s0)
+        print(s1)
+        print("With robot action "+ar)
         break
     stateSequence.append(s1)
     return stateSequence, robotActionSequence, humanActionSequence
