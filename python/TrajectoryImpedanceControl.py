@@ -89,7 +89,7 @@ class VariableImpedanceController:
     self.stiff_des = Float32MultiArray()
 
     self.eeDOF = eeCtrlDOF
-    self.debugLevel = 0
+    self.debugLevel = 1
     self.varStiff = True
     self.nullspaceControl = nullspaceControl
     if self.nullspaceControl:
@@ -212,7 +212,7 @@ class VariableImpedanceController:
         # compute setpoint
         xSetpoint, qSetpoint = self.trajectory.getSetpoint(dt, self.curr_pos, self.curr_ori)
 
-        if self.debugLevel >= 1:
+        if self.debugLevel >= 2:
           if (err:=np.linalg.norm(self.force)) > fErr:
             print('High force detected: {0} N'.format(err))
           if (err:=np.linalg.norm(self.torque)) > tErr:
@@ -269,7 +269,7 @@ class VariableImpedanceController:
         # exit when goal is reached
         if isAtGoal():
           interactionStiffness = max(interactionStiffness-dt/T_reduce_stiff, 0)
-          self.setPassive()
+          # self.setPassive()
 
         # exit when stiffness is dropped
         if self.stiffness[0] < 1e-9 and (self.eeDOF < 4 or self.stiffness[5] < 1e-9):
@@ -286,8 +286,11 @@ class VariableImpedanceController:
         # exit when standing still
         if np.linalg.norm(self.curr_pos - old_pose[0]) < xMargin and Q.rotation_intrinsic_distance(self.curr_ori, old_pose[1]) < qMargin:
           noMotionIter += 1
-          if noMotionIter > 0.5/dt: # 0.5 sec
+          if noMotionIter > 5./dt: # 5 sec
+            if self.debugLevel >= 1:
+              print("Standing still")
             self.setPassive()
+            noMotionIter = 0
         else:
           noMotionIter = 0
         old_pose = [self.curr_pos, self.curr_ori]
